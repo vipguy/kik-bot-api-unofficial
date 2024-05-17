@@ -4,7 +4,8 @@ from typing import Union
 
 from bs4 import BeautifulSoup
 
-from kik_unofficial.utilities.parsing_utilities import ParsingUtilities, get_text_of_tag, is_tag_present
+from kik_unofficial.utilities.parsing_utilities import ParsingUtilities, get_text_of_tag, is_tag_present, \
+    get_optional_attribute
 from kik_unofficial.datatypes.exceptions import KikApiException
 from kik_unofficial.protobuf.entity.v1.entity_common_pb2 import EntityUser
 
@@ -139,16 +140,38 @@ class Group(Peer):
         if "jid" not in data.attrs:
             raise KikApiException("No jid in group xml")
         super().__init__(data["jid"])
-        self.members = [GroupMember(m) for m in data.find_all("c", recursive=False)]  # creators of the group (used when a user initially creates a group)
-        self.members += [GroupMember(m) for m in data.find_all("m", recursive=False)]  # members in the group
-        self.banned_members = [GroupMember(m) for m in data.find_all("b", recursive=False)]  # banned member jids
-        self.removed_members = [
-            GroupMember(m) for m in data.find_all("l", recursive=False)
-        ]  # jids of members that left (used for 'has left the chat' status message events)
+
+        # 'c' is for group creator (used when a user initially creates a group)
+        self.members = [GroupMember(m) for m in data.find_all("c", recursive=False)]
+
+        # members in the group
+        self.members += [GroupMember(m) for m in data.find_all("m", recursive=False)]
+
+        # JIDs of banned members.
+        self.banned_members = [GroupMember(m) for m in data.find_all("b", recursive=False)]
+
+        # JIDs of members that left (used for 'has left the chat' status message events)
+        self.removed_members = [GroupMember(m) for m in data.find_all("l", recursive=False)]
+
+        # Hashtag of the group, may be None
         self.code = get_text_of_tag(data, "code")
+
+        # Display name of the group, may be None
         self.name = get_text_of_tag(data, "n")
-        self.is_public = data.get("is-public") == "true"
+
+        # True if this is a public group
+        # Any group with a hashtag is a public group.
+        self.is_public = self.code is not None or get_optional_attribute(data, "is-public") == "true"
+
+        # Profile pic of the group, may be None
         self.profile_pic = ProfilePic.parse(data)
+
+        # Category ID of the group, may be None.
+        # If set, it is a 32-bit integer (from protobuf docs) that is used to tell the client
+        # which category this group is placed in.
+        self.category_id = int(get_optional_attribute(data, "category-id")) \
+            if get_optional_attribute(data, "category-id", default='').isdigit() \
+            else None
 
         # Deprecated field kept for backwards compatibility.
         # Callers should migrate to self.profile_pic
