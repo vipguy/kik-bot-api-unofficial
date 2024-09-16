@@ -192,8 +192,16 @@ class ConnectionFailedResponse:
     def __init__(self, data: BeautifulSoup):
         """True if the password / device ID pair was invalidated (auth rejected)"""
         self.is_auth_revoked = is_tag_present(data, "noauth")
-        """the error message received. Will be an empty string if is_auth_revoked = False"""
-        self.message = data.noauth.msg.text if is_tag_present(data, "noauth") else ""
+
+        """True if the version is rejected due to being out of date."""
+        self.is_bad_version = is_tag_present(data, "badver")
+
+        if self.is_auth_revoked:
+            self.message = data.noauth.msg.text
+        elif self.is_bad_version:
+            self.message = data.badver.msg.text
+        else:
+            self.message = ''
 
         """True if a backoff was requested by Kik's server"""
         self.is_backoff = is_tag_present(data, "wait")

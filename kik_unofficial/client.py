@@ -174,12 +174,15 @@ class KikClient:
     def register(self, email: str, username: str, password: str, first_name: str, last_name: str, birthday: str, captcha_result: str = None):
         """
         Sends a register request to sign up a new user to kik with the given details.
+
+        Deprecated: Registering via this API is not yet implemented due to the protocol being completely changed.
         """
-        self.username = username
-        self.password = password
-        register_message = sign_up.RegisterRequest(email, username, password, first_name, last_name, birthday, captcha_result, self.device_id, self.android_id)
-        self.log.info(f"Sending sign up request (name: {first_name} {last_name}, email: {email})...")
-        return self._send_xmpp_element(register_message)
+        # self.username = username
+        # self.password = password
+        # register_message = sign_up.RegisterRequest(email, username, password, first_name, last_name, birthday, captcha_result, self.device_id, self.android_id)
+        # self.log.info(f"Sending sign up request (name: {first_name} {last_name}, email: {email})...")
+        # return self._send_xmpp_element(register_message)
+        self.log.error("registering via this API is not yet implemented")
 
     def request_roster(self, is_batched: bool = False, timestamp: Union[str, None] = None, mts: Union[str, None] = None):
         """
@@ -581,7 +584,7 @@ class KikClient:
         self.log.info(f"Checking for Uniqueness of username '{username}'")
         return self._send_xmpp_element(sign_up.CheckUsernameUniquenessRequest(username))
 
-    def set_profile_picture(self, file: str or bytes or pathlib.Path or io.IOBase):
+    def set_profile_picture(self, file: Union[str, bytes, pathlib.Path, io.IOBase]):
         """
         Sets the profile picture of the current user
 
@@ -590,7 +593,7 @@ class KikClient:
         self.log.info(f"Changing profile picture for {self.username}")
         profile_pictures.set_profile_picture(file, f"{self.kik_node}@talk.kik.com", self.username, self.password)
 
-    def set_background_picture(self, file: str or bytes or pathlib.Path or io.IOBase):
+    def set_background_picture(self, file: Union[str, bytes, pathlib.Path, io.IOBase]):
         """
         Sets the background picture of the current user
 
@@ -599,7 +602,7 @@ class KikClient:
         self.log.info(f"Changing background picture for {self.username}")
         profile_pictures.set_background_picture(file, f"{self.kik_node}@talk.kik.com", self.username, self.password)
 
-    def set_group_picture(self, file: str or bytes or pathlib.Path or io.IOBase, group_jid: str, silent: bool = False):
+    def set_group_picture(self, file: Union[str, bytes, pathlib.Path, io.IOBase], group_jid: str, silent: bool = False):
         """
         Sets the profile picture for a group JID.
 
@@ -766,7 +769,16 @@ class KikClient:
             error = login.ConnectionFailedResponse(k_element)
             if error.is_auth_revoked:
                 # Force a login attempt
+                self.log.warning(f"auth revoked for {self.kik_node}, falling back to login attempt")
                 self.kik_node = None
+            elif error.is_bad_version:
+                # Bad version
+                self.log.error(f"client received bad version error ({error.message}), shutting down.\n"
+                               "Update the `kik_version_info` field in device_configuration.py to continue")
+                self.is_permanent_disconnection = True
+            elif error.is_backoff:
+                # Backoff requested
+                self.log.warning(f"backoff received for {error.backoff_seconds}s, ignoring")
             self.callback.on_connection_failed(error)
         return connected
 
